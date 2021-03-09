@@ -2,7 +2,6 @@
 
 const Package = (exports.Package = require('../../package.json'));
 const { Error, RangeError } = require('../errors');
-const browser = (exports.browser = typeof window !== 'undefined');
 
 /**
  * Options for a client.
@@ -19,11 +18,6 @@ const browser = (exports.browser = typeof window !== 'undefined');
  * sweepable (in seconds, 0 for forever)
  * @property {number} [messageSweepInterval=0] How frequently to remove messages from the cache that are older than
  * the message cache lifetime (in seconds, 0 for never)
- * @property {number} [messageEditHistoryMaxSize=-1] Maximum number of previous versions to hold for an edited message
- * (-1 or Infinity for unlimited - don't do this without sweeping, otherwise memory usage may climb indefinitely.)
- * @property {boolean} [fetchAllMembers=false] Whether to cache all guild members and users upon startup, as well as
- * upon joining a guild (should be avoided whenever possible)
- * @property {DisableMentionType} [disableMentions='none'] Default value for {@link MessageOptions#disableMentions}
  * @property {MessageMentionOptions} [allowedMentions] Default value for {@link MessageOptions#allowedMentions}
  * @property {PartialType[]} [partials] Structures allowed to be partial. This means events can be emitted even when
  * they're missing all the data for a particular structure. See the "Partials" topic listed in the sidebar for some
@@ -36,7 +30,8 @@ const browser = (exports.browser = typeof window !== 'undefined');
  * @property {number} [restSweepInterval=60] How frequently to delete inactive request buckets, in seconds
  * (or 0 for never)
  * @property {number} [retryLimit=1] How many times to retry on 5XX errors (Infinity for indefinite amount of retries)
- * @property {PresenceData} [presence] Presence data to use upon login
+ * @property {PresenceData} [presence={}] Presence data to use upon login
+ * @property {IntentsResolvable} intents Intents to enable for this connection
  * @property {WebsocketOptions} [ws] Options for the WebSocket
  * @property {HTTPOptions} [http] HTTP options
  */
@@ -45,9 +40,6 @@ exports.DefaultOptions = {
   messageCacheMaxSize: 200,
   messageCacheLifetime: 0,
   messageSweepInterval: 0,
-  messageEditHistoryMaxSize: -1,
-  fetchAllMembers: false,
-  disableMentions: 'none',
   partials: [],
   restWsBridgeTimeout: 5000,
   restRequestTimeout: 15000,
@@ -61,17 +53,16 @@ exports.DefaultOptions = {
    * @typedef {Object} WebsocketOptions
    * @property {number} [large_threshold=50] Number of members in a guild after which offline users will no longer be
    * sent in the initial guild member list, must be between 50 and 250
-   * @property {IntentsResolvable} [intents] Intents to enable for this connection
    */
   ws: {
     large_threshold: 50,
     compress: false,
     properties: {
-      $os: browser ? 'browser' : process.platform,
+      $os: process.platform,
       $browser: 'discord.js',
       $device: 'discord.js',
     },
-    version: 6,
+    version: 8,
   },
 
   /**
@@ -81,18 +72,18 @@ exports.DefaultOptions = {
    * @property {string} [api='https://discord.com/api'] Base url of the API
    * @property {string} [cdn='https://cdn.discordapp.com'] Base url of the CDN
    * @property {string} [invite='https://discord.gg'] Base url of invites
+   * @property {string} [template='https://discord.new'] Base url of templates
    */
   http: {
-    version: 7,
+    version: 8,
     api: 'https://discord.com/api',
     cdn: 'https://cdn.discordapp.com',
     invite: 'https://discord.gg',
+    template: 'https://discord.new',
   },
 };
 
-exports.UserAgent = browser
-  ? null
-  : `DiscordBot (${Package.homepage.split('#')[0]}, ${Package.version}) Node.js/${process.version}`;
+exports.UserAgent = `DiscordBot (${Package.homepage.split('#')[0]}, ${Package.version}) Node.js/${process.version}`;
 
 exports.WSCodes = {
   1000: 'WS_CLOSE_REQUESTED',
@@ -385,6 +376,36 @@ exports.WSEvents = keyMirror([
 ]);
 
 /**
+ * A valid scope to request when generating an invite link.
+ * <warn>Scopes that require whitelist are not considered valid for this generator</warn>
+ * * `applications.builds.read`: allows reading build data for a users applications
+ * * `applications.commands`: allows this bot to create commands in the server
+ * * `applications.entitlements`: allows reading entitlements for a users applications
+ * * `applications.store.update`: allows reading and updating of store data for a users applications
+ * * `connections`: makes the endpoint for getting a users connections available
+ * * `email`: allows the `/users/@me` endpoint return with an email
+ * * `identify`: allows the `/users/@me` endpoint without an email
+ * * `guilds`: makes the `/users/@me/guilds` endpoint available for a user
+ * * `guilds.join`: allows the bot to join the user to any guild it is in using Guild#addMember
+ * * `gdm.join`: allows joining the user to a group dm
+ * * `webhook.incoming`: generates a webhook to a channel
+ * @typedef {string} InviteScope
+ */
+exports.InviteScopes = [
+  'applications.builds.read',
+  'applications.commands',
+  'applications.entitlements',
+  'applications.store.update',
+  'connections',
+  'email',
+  'identity',
+  'guilds',
+  'guilds.join',
+  'gdm.join',
+  'webhook.incoming',
+];
+
+/**
  * The type of a message, e.g. `DEFAULT`. Here are the available types:
  * * DEFAULT
  * * RECIPIENT_ADD
@@ -401,6 +422,7 @@ exports.WSEvents = keyMirror([
  * * CHANNEL_FOLLOW_ADD
  * * GUILD_DISCOVERY_DISQUALIFIED
  * * GUILD_DISCOVERY_REQUALIFIED
+ * * REPLY
  * @typedef {string} MessageType
  */
 exports.MessageTypes = [
@@ -420,7 +442,19 @@ exports.MessageTypes = [
   null,
   'GUILD_DISCOVERY_DISQUALIFIED',
   'GUILD_DISCOVERY_REQUALIFIED',
+  null,
+  null,
+  null,
+  'REPLY',
 ];
+
+/**
+ * The types of messages that are `System`. The available types are `MessageTypes` excluding:
+ * * DEFAULT
+ * * REPLY
+ * @typedef {string} SystemMessageType
+ */
+exports.SystemMessageTypes = exports.MessageTypes.filter(type => type && type !== 'DEFAULT' && type !== 'REPLY');
 
 /**
  * <info>Bots cannot set a `CUSTOM_STATUS`, it is only for custom statuses received from users</info>
@@ -519,17 +553,28 @@ exports.VerificationLevels = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
  * * UNKNOWN_USER
  * * UNKNOWN_EMOJI
  * * UNKNOWN_WEBHOOK
+ * * UNKNOWN_BAN
+ * * UNKNOWN_GUILD_TEMPLATE
  * * BOT_PROHIBITED_ENDPOINT
  * * BOT_ONLY_ENDPOINT
+ * * ANNOUNCEMENT_EDIT_LIMIT_EXCEEDED
+ * * CHANNEL_HIT_WRITE_RATELIMIT
  * * MAXIMUM_GUILDS
  * * MAXIMUM_FRIENDS
  * * MAXIMUM_PINS
  * * MAXIMUM_ROLES
+ * * MAXIMUM_WEBHOOKS
  * * MAXIMUM_REACTIONS
  * * MAXIMUM_CHANNELS
+ * * MAXIMUM_ATTACHMENTS
  * * MAXIMUM_INVITES
+ * * GUILD_ALREADY_HAS_TEMPLATE
  * * UNAUTHORIZED
+ * * ACCOUNT_VERIFICATION_REQUIRED
+ * * REQUEST_ENTITY_TOO_LARGE
+ * * FEATURE_TEMPORARILY_DISABLED
  * * USER_BANNED
+ * * ALREADY_CROSSPOSTED
  * * MISSING_ACCESS
  * * INVALID_ACCOUNT_TYPE
  * * CANNOT_EXECUTE_ON_DM
@@ -549,11 +594,14 @@ exports.VerificationLevels = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
  * * CANNOT_PIN_MESSAGE_IN_OTHER_CHANNEL
  * * INVALID_OR_TAKEN_INVITE_CODE
  * * CANNOT_EXECUTE_ON_SYSTEM_MESSAGE
+ * * CANNOT_EXECUTE_ON_CHANNEL_TYPE
  * * INVALID_OAUTH_TOKEN
+ * * INVALID_RECIPIENTS
  * * BULK_DELETE_MESSAGE_TOO_OLD
  * * INVALID_FORM_BODY
  * * INVITE_ACCEPTED_TO_GUILD_NOT_CONTAINING_BOT
  * * INVALID_API_VERSION
+ * * CANNOT_DELETE_COMMUNITY_REQUIRED_CHANNEL
  * * REACTION_BLOCKED
  * * RESOURCE_OVERLOADED
  * @typedef {string} APIError
@@ -574,17 +622,28 @@ exports.APIErrors = {
   UNKNOWN_USER: 10013,
   UNKNOWN_EMOJI: 10014,
   UNKNOWN_WEBHOOK: 10015,
+  UNKNOWN_BAN: 10026,
+  UNKNOWN_GUILD_TEMPLATE: 10057,
   BOT_PROHIBITED_ENDPOINT: 20001,
   BOT_ONLY_ENDPOINT: 20002,
+  ANNOUNCEMENT_EDIT_LIMIT_EXCEEDED: 20022,
+  CHANNEL_HIT_WRITE_RATELIMIT: 20028,
   MAXIMUM_GUILDS: 30001,
   MAXIMUM_FRIENDS: 30002,
   MAXIMUM_PINS: 30003,
   MAXIMUM_ROLES: 30005,
+  MAXIMUM_WEBHOOKS: 30007,
   MAXIMUM_REACTIONS: 30010,
   MAXIMUM_CHANNELS: 30013,
+  MAXIMUM_ATTACHMENTS: 30015,
   MAXIMUM_INVITES: 30016,
+  GUILD_ALREADY_HAS_TEMPLATE: 30031,
   UNAUTHORIZED: 40001,
+  ACCOUNT_VERIFICATION_REQUIRED: 40002,
+  REQUEST_ENTITY_TOO_LARGE: 40005,
+  FEATURE_TEMPORARILY_DISABLED: 40006,
   USER_BANNED: 40007,
+  ALREADY_CROSSPOSTED: 40033,
   MISSING_ACCESS: 50001,
   INVALID_ACCOUNT_TYPE: 50002,
   CANNOT_EXECUTE_ON_DM: 50003,
@@ -604,11 +663,14 @@ exports.APIErrors = {
   CANNOT_PIN_MESSAGE_IN_OTHER_CHANNEL: 50019,
   INVALID_OR_TAKEN_INVITE_CODE: 50020,
   CANNOT_EXECUTE_ON_SYSTEM_MESSAGE: 50021,
+  CANNOT_EXECUTE_ON_CHANNEL_TYPE: 50024,
   INVALID_OAUTH_TOKEN: 50025,
+  INVALID_RECIPIENTS: 50033,
   BULK_DELETE_MESSAGE_TOO_OLD: 50034,
   INVALID_FORM_BODY: 50035,
   INVITE_ACCEPTED_TO_GUILD_NOT_CONTAINING_BOT: 50036,
   INVALID_API_VERSION: 50041,
+  CANNOT_DELETE_COMMUNITY_REQUIRED_CHANNEL: 50074,
   REACTION_BLOCKED: 90001,
   RESOURCE_OVERLOADED: 130000,
 };
@@ -647,8 +709,26 @@ exports.WebhookTypes = [
   'Channel Follower',
 ];
 
+/**
+ * An overwrite type:
+ * * role
+ * * member
+ * @typedef {string} OverwriteType
+ */
+exports.OverwriteTypes = createEnum(['role', 'member']);
+
 function keyMirror(arr) {
   let tmp = Object.create(null);
   for (const value of arr) tmp[value] = value;
   return tmp;
+}
+
+function createEnum(keys) {
+  const obj = {};
+  for (const [index, key] of keys.entries()) {
+    if (key === null) continue;
+    obj[key] = index;
+    obj[index] = key;
+  }
+  return obj;
 }
