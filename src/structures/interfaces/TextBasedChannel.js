@@ -141,7 +141,7 @@ class TextBasedChannel {
    *   .then(console.log)
    *   .catch(console.error);
    */
-  async send(content, options) {
+  async send(content, options,msg) {
     const User = require('../User');
     const GuildMember = require('../GuildMember');
 
@@ -161,6 +161,7 @@ class TextBasedChannel {
     }
 
     const { data, files } = await apiMessage.resolveFiles();
+    if(msg)data.message_reference = {message_id : msg.id,guild_id : msg.guild.id}
     return this.client.api.channels[this.id].messages
       .post({ data, files })
       .then(d => this.client.actions.MessageCreate.handle(d).message);
