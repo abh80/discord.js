@@ -145,7 +145,10 @@ class TextBasedChannel {
     }
 
     const { data, files } = await apiMessage.resolveFiles();
-    if(msg)data.message_reference = {message_id : msg.id,guild_id : msg.guild.id}
+    if(msg){
+      data.message_reference = {message_id : msg.id,guild_id : msg.guild.id}
+      data.allowed_mentions = {parse : ["users","roles","everyone"] , replied_user : false}
+    }
     return this.client.api.channels[this.id].messages
       .post({ data, files })
       .then(d => this.client.actions.MessageCreate.handle(d).message);
