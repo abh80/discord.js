@@ -152,6 +152,8 @@ class TextBasedChannel {
 
         const { data, files } = await apiMessage.resolveFiles();
         if (msg && msg.interaction) {
+        if(msg.private) data.flags = true;
+        data.allowed_mentions = { parse : [ "users"] }
             this.client.api
                 .interactions(msg.interaction.id, msg.interaction.token)
                 .callback.post({
@@ -169,7 +171,7 @@ class TextBasedChannel {
                 guild_id: msg.guild.id,
             };
             data.allowed_mentions = {
-                parse: ["users", "roles", "everyone"],
+                parse: ["users"],
                 replied_user: false,
             };
         }
