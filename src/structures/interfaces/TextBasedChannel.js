@@ -152,7 +152,7 @@ class TextBasedChannel {
 
         const { data, files } = await apiMessage.resolveFiles();
         if (msg && msg.interaction) {
-        if(msg.private) data.flags = true;
+        if(msg.private) data.flags = 64;
         data.allowed_mentions = { parse : [ "users"] }
             this.client.api
                 .interactions(msg.interaction.id, msg.interaction.token)
