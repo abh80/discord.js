@@ -153,7 +153,7 @@ class TextBasedChannel {
         const { data, files } = await apiMessage.resolveFiles();
         if (msg.interaction) {
             this.client.api
-                .interactions(msg.interaction.id, msg.interactions.token)
+                .interactions(msg.interaction.id, msg.interaction.token)
                 .callback.post({
                     data: {
                         type: 4,
