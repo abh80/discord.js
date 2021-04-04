@@ -151,7 +151,7 @@ class TextBasedChannel {
         }
 
         const { data, files } = await apiMessage.resolveFiles();
-        if (msg.interaction) {
+        if (msg && msg.interaction) {
             this.client.api
                 .interactions(msg.interaction.id, msg.interaction.token)
                 .callback.post({
